@@ -1,0 +1,99 @@
+version: '3.7'
+
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "true"
+      MYSQL_DATABASE: "passbolt"
+      MYSQL_USER: "passbolt"
+      MYSQL_PASSWORD: #YOUR MYSQL PASSWORD
+    volumes:
+      - database_volume:/var/lib/mysql
+    networks:
+      - passbolt-net
+
+  passbolt:
+    image: passbolt/passbolt:latest-ce
+    container_name: passbolt
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      APP_FULL_BASE_URL: https://passbolt.YOUR DOMAIN.com:2443
+      DATASOURCES_DEFAULT_HOST: "db"
+      DATASOURCES_DEFAULT_USERNAME: "passbolt"
+      DATASOURCES_DEFAULT_PASSWORD: "P4ssb0lt"
+      DATASOURCES_DEFAULT_DATABASE: "passbolt"
+      PASSBOLT_PLUGINS_JWT_AUTHENTICATION_ENABLED: true
+      EMAIL_DEFAULT_FROM_NAME: "Passbolt"
+      EMAIL_DEFAULT_FROM: #YOUR GMAIL ACCOUNT
+      EMAIL_TRANSPORT_DEFAULT_HOST: "smtp.gmail.com"
+      EMAIL_TRANSPORT_DEFAULT_PORT: "587"
+      EMAIL_TRANSPORT_DEFAULT_USERNAME: #YOUR GMAIL ACCOUNT
+      EMAIL_TRANSPORT_DEFAULT_PASSWORD: #YOUR APP PASSWORD
+      EMAIL_TRANSPORT_DEFAULT_TLS: "true"
+  
+    volumes:
+      - gpg_volume:/etc/passbolt/gpg
+      - jwt_volume:/etc/passbolt/jwt
+
+    command:
+      [
+        "/usr/bin/wait-for.sh",
+        "-t",
+        "0",
+        "db:3306",
+        "--",
+        "/docker-entrypoint.sh",
+      ]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.passbolt.rule=Host(`passbolt.YOUR DOMAIN.com`)"
+      - "traefik.http.routers.passbolt.entrypoints=websecure"
+      - "traefik.http.routers.passbolt.tls.certresolver=letsencrypt"
+      - "traefik.http.services.passbolt.loadbalancer.server.port=80"
+      - "traefik.http.routers.passbolt.service=passbolt"
+    networks:
+      - passbolt-net
+
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: always
+    environment:
+      CLOUDFLARE_DNS_API_TOKEN: #YOUR CLOUD FLARE TOKEN
+    command:
+      - "--entrypoints.websecure.address=:443"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.letsencrypt.acme.email=dnnansari@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--log.level=DEBUG"
+    ports:
+      - "443:443"
+      - "8081:8080"
+    #Alternatively for non-root images:
+    # - 80:8080
+    # - 443:4433
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - passbolt-net
+
+volumes:
+  database_volume:
+  gpg_volume:
+  jwt_volume:
+  traefik_letsencrypt:
+
+networks:
+  passbolt-net:
+    external: true

@@ -1,0 +1,7 @@
+tunnel: passbolt-tunnel
+credentials-file: /home/administrator/cloudflared/pasbolt-tunnel.json
+
+ingress:
+  - hostname: passbolt.rage00786.com
+    service: http://passbolt:80
+  - service: http_status:404
